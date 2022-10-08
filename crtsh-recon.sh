@@ -3,7 +3,7 @@
 ################################################################################
 ## Name: crtsh-recon
 ## Author: Kyle Walters (yekisec) 
-## License: GNU - General Public License (GPL)
+## License: GNU - General Public License 3 (GPL)
 ##
 ## Functionality: 
 ##
@@ -29,8 +29,7 @@ MISSING_DEPENDENCY=5 # exit code 5 indicates a missing dependency
 DEPENDENCIES="curl jq sed"
 
 prog_exists () {
-	if ! command -v $1 &> /dev/null
-	then
+	if ! command -v $1 &> /dev/null; then
 		echo "0"
 	else
 		echo "1"
@@ -38,23 +37,28 @@ prog_exists () {
 }
 
 for DEPENDENCY in $DEPENDENCIES; do
-	if [[ $(prog_exists $DEPENDENCY) -eq 0 ]] # prog_exists returns 0 if command not found.
-	then
+	if [[ $(prog_exists $DEPENDENCY) -eq 0 ]]; then # prog_exists returns 0 if command not found.
 		printf "ERROR: the command \"$DEPENDENCY\" could not be located in the \$PATH\n"
 		exit $MISSING_DEPENDENCY
 	fi
 done
 
-
 IFS=$'\n'
-if [[ ! $# -ge 1 ]]
-then
+WILDCARD_DOMAINS=""
+if [ $(ls /proc/self/fd/0 -al | awk -F' ' '{ print $11 }' | cut -d ':' -f 1) == "pipe" ] && [[ $# -ge 1 ]]; then
+	WILDCARD_DOMAIN1=$(</dev/stdin)
+	WILDCARD_DOMAIN2="$*"
+	WILDCARD_DOMAINS="$WILDCARD_DOMAIN1 $WILDCARD_DOMAIN2"
+elif [[ $# -ge 1 ]] && [ ! $(ls /proc/self/fd/0 -al | awk -F' ' '{ print $11 }' | cut -d ':' -f 1) == "pipe" ]; then
+	WILDCARD_DOMAINS="$*"
+elif [[ ! $# -ge 1 ]] && [ $(ls /proc/self/fd/0 -al | awk -F' ' '{ print $11 }' | cut -d ':' -f 1) == "pipe" ]; then
 	WILDCARD_DOMAINS=$(</dev/stdin)
 else
-	WILDCARD_DOMAINS="$*"
+	printf "ERROR: This script requires at least one wildcard domain to be\nprovided via STD-IN or command-line argument."
 fi
+
 RESULTS=""
-for WILDCARD_DOMAIN in $WILDCARD_DOMAINS; do
+for WILDCARD_DOMAIN in $(echo $WILDCARD_DOMAINS | tr ' ' '\n'); do
 	RESULTS+=$(curl -s "https://crt.sh/?q=%25.$WILDCARD_DOMAIN&output=json" | jq .[].common_name | sed "s/\"//g" | grep "\.$WILDCARD_DOMAIN$" | sed "s/^\*\.//g" | sort -u)
 
 done
